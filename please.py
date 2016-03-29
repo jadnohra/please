@@ -26,6 +26,13 @@ def cwdtemp():
 def mktemp():
 	if os.path.isdir(fptemp()) == False:
 		os.mkdir(fptemp())
+def randfilename(dir, pre, ext):
+	i = 1
+	while True:
+		fname = "{}{}.{}".format(pre, i, ext)
+		if (os.path.isfile(os.path.join(dir, fname)) == False):
+			return fname
+		i=i+1
 def fileSize(num, suffix='b'):
 	for unit in ['','K','M','G','T','P','E','Z']:
 	    if abs(num) < 1024.0:
@@ -77,7 +84,12 @@ def process_scrape(arg):
 		print '[{}]'.format(fileSize(os.path.getsize(fp)))
 	return temps
 def join_files(files):
-	out_name = long_substr(files)+'.pdf'
+	fname_substr = long_substr(files)
+	if len(fname_substr) and (os.path.isdir(fname_substr) == False):
+		out_name = '{}.pdf'.format(fname_substr)
+	else:
+		out_dir = fname_substr if os.path.isdir(fname_substr) else fptemp()
+		out_name = fpjoin([out_dir, randfilename(out_dir, 'join_', 'pdf')])
 	pop_in = [fpjoinhere(['concat_pdf']), '--output', out_name] + files
 	pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE)
 	out, err = pop.communicate()
