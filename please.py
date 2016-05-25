@@ -94,6 +94,21 @@ def join_files(files):
 	pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE)
 	out, err = pop.communicate()
 	return out_name
+def move_tabs_to_new_window():
+	scpt = """
+	tell application "Safari"
+	set l to tabs of window 1 where index >= (get index of current tab of window 1)
+	make new document
+	repeat with t in (reverse of l)
+		move t to beginning of tabs of window 1
+	end repeat
+	delete tab -1 of window 1
+	end tell
+	"""
+	args = []
+	p = subprocess.Popen(['osascript', '-'] + args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+	out = p.communicate(scpt)
+	#print (p.returncode, stdout, stderr)
 def process(text_):
 	text = text_.strip()
 	patt1 = 'find files with '
@@ -104,6 +119,7 @@ def process(text_):
 	patt6 = 'count files'
 	patt7 = 'scrape and join '
 	patt8 = 'scrape '
+	patt9 = 'move tabs'
 	if text.startswith(patt1):
 		arg = text[len(patt1):]
 		pop_in = ['grep', '-ril', '"{}"'.format(arg), '.']
@@ -151,6 +167,8 @@ def process(text_):
 	elif text.startswith(patt8):
 		arg = text[len(patt8):]
 		process_scrape(arg)
+	elif text.startswith(patt9):
+		move_tabs_to_new_window()
 	else:
 		print "Apologies, I could not understand what you said."
 
