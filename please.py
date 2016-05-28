@@ -110,16 +110,19 @@ def move_tabs_to_new_window():
 	out = p.communicate(scpt)
 	#print (p.returncode, stdout, stderr)
 def process(text_):
+	patts = []
+	def new_patt(name):
+		patts.append(name); return name;
 	text = text_.strip()
-	patt1 = 'find files with '
-	patt2 = 'find files named '
-	patt3 = 'find duplicates'
-	patt4 = 'join files named '
-	patt5 = 'show '
-	patt6 = 'count files'
-	patt7 = 'scrape and join '
-	patt8 = 'scrape '
-	patt9 = 'move tabs'
+	patt1 = new_patt('find files with ')
+	patt2 = new_patt('find files named ')
+	patt3 = new_patt('find duplicates')
+	patt4 = new_patt('join files named ')
+	patt5 = new_patt('show ')
+	patt6 = new_patt('count files')
+	patt7 = new_patt('scrape and join ')
+	patt8 = new_patt('scrape ')
+	patt9 = new_patt('move tabs')
 	if text.startswith(patt1):
 		arg = text[len(patt1):]
 		pop_in = ['grep', '-ril', '"{}"'.format(arg), '.']
@@ -171,5 +174,7 @@ def process(text_):
 		move_tabs_to_new_window()
 	else:
 		print "Apologies, I could not understand what you said."
+		print "I understand:"
+		print '\n'.join([' ' + x for x in patts])
 
 process(' '.join(sys.argv[1:]))
