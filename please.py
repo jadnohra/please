@@ -64,8 +64,8 @@ def process_scrape(arg):
 	dom =  lxml.html.fromstring(page.text)
 	selAnchor = lxml.cssselect.CSSSelector('a')
 	foundElements = selAnchor(dom)
-	#print foundElements
-	foundPdf = [e.get('href') for e in foundElements if e.get('href').endswith('.pdf')]
+	#print [e.get('href') for e in foundElements if e.get('href') and e.get('href').endswith('.pdf')]
+	foundPdf = [e.get('href') for e in foundElements if e.get('href') and e.get('href').endswith('.pdf')]
 	#print foundPdf
 	print ' [{} files]'.format(len(foundPdf)); sys.stdout.flush();
 	mktemp()
@@ -74,7 +74,7 @@ def process_scrape(arg):
 	for pdf in foundPdf:
 		fn = urllib2.urlparse.urlsplit(pdf).path.split('/')[-1]
 		fp = fpjoinhere(['temp', fn])
-		furl = urlparse.urljoin(arg, pdf)
+		furl = urlparse.urljoin(arg, pdf).replace('\\', '/')
 		print '  {} -> {} ...'.format(furl,  fp),; sys.stdout.flush();
 		if (os.path.isfile(fp)):
 			print ' (cached)',
