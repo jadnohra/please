@@ -58,6 +58,18 @@ def process_scrape(arg):
 	if lxml == None:
 			print "You need to install 'lxml' and 'requests' first."
 			return
+	mktemp()
+	temps = []
+	#try to get main page as pdf
+	src_pdf_fp = fpjoinhere(['temp', 'scrape_source.pdf'])
+	print ' Converting {} -> {} ...'.format(arg, src_pdf_fp)
+	pop_in = ['wkhtmltopdf', arg, src_pdf_fp]
+	pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	out, err = pop.communicate()
+	if err and len(err):
+		print '  Failed to convert source page'
+	else:
+		temps.append(src_pdf_fp)
 	urllib.URLopener.version = 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.153 Safari/537.36 SE 2.X MetaSr 1.0'
 	print ' Reading \n  {} ...'.format(arg), ;sys.stdout.flush();
 	page = requests.get(arg)
@@ -68,9 +80,7 @@ def process_scrape(arg):
 	foundPdf = [e.get('href') for e in foundElements if e.get('href') and e.get('href').endswith('.pdf')]
 	#print foundPdf
 	print ' [{} files]'.format(len(foundPdf)); sys.stdout.flush();
-	mktemp()
 	print ' Downloading {} files...'.format(len(foundPdf))
-	temps = []
 	for pdf in foundPdf:
 		fn = urllib2.urlparse.urlsplit(pdf).path.split('/')[-1]
 		fp = fpjoinhere(['temp', fn])
@@ -91,7 +101,7 @@ def join_files(files):
 		out_dir = fname_substr if os.path.isdir(fname_substr) else fptemp()
 		out_name = fpjoin([out_dir, randfilename(out_dir, 'join_', 'pdf')])
 	pop_in = [fpjoinhere(['concat_pdf']), '--output', out_name] + files
-	pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE)
+	pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	out, err = pop.communicate()
 	return out_name
 def move_tabs_to_new_window():
