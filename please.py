@@ -193,9 +193,9 @@ def get_list_tabs(right_of_curr = False):
 	out,err = p.communicate(scpt)
 	urls = [x for x in out.split('\n') if len(x)]
 	return urls
-def list_tabs(right_of_curr = False):
+def list_tabs(right_of_curr = False, use_tex = False):
 	urls = get_list_tabs(right_of_curr)
-	print '\n', '\n'.join(urls), '\n'
+	print '\n', '\n'.join(['\\url{{ {} }}'.format(x) if use_tex else x for x in urls]), '\n'
 def join_tabs(right_of_curr = False, interactive = False):
 	def url_to_pdf_2(url, pdf):
 		return url_to_pdf(url, pdf, 2)
@@ -305,8 +305,8 @@ def process(text_):
 	patt7 = new_patt('scrape and join ')
 	patt8 = new_patt('scrape ')
 	patt9 = new_patt('move tabs')
-	patt10 = new_patt('list all tabs')
-	patt11 = new_patt('list tabs')
+	patt10 = new_patt('list all tabs', 'tex')
+	patt11 = new_patt('list tabs', 'tex')
 	patt12 = new_patt('join tabs', 'interactive')
 	patt13 = new_patt('clean temp')
 	if text.startswith(patt1):
@@ -359,9 +359,9 @@ def process(text_):
 	elif text.startswith(patt9):
 		move_tabs_to_new_window()
 	elif text.startswith(patt10):
-			list_tabs(False)
+			list_tabs(False, 'tex' in text)
 	elif text.startswith(patt11):
-			list_tabs(True)
+			list_tabs(True, 'tex' in text)
 	elif text.startswith(patt12):
 			join_tabs(True, 'interactive' in text)
 	elif text.startswith(patt13):
