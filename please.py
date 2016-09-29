@@ -309,6 +309,8 @@ def process(text_):
 	patt11 = new_patt('list tabs', 'tex')
 	patt12 = new_patt('join tabs', 'interactive')
 	patt13 = new_patt('clean temp')
+	patt14 = new_patt('git status')
+	patt15 = new_patt('push git', 'message')
 	if text.startswith(patt1):
 		arg = text[len(patt1):]
 		pop_in = ['grep', '-ril', '"{}"'.format(arg), '.']
@@ -366,6 +368,16 @@ def process(text_):
 			join_tabs(True, 'interactive' in text)
 	elif text.startswith(patt13):
 		shutil.rmtree(fptemp())
+	elif text.startswith(patt14):
+		pop_in = ['git', 'status']
+		pop = subprocess.Popen(' '.join(pop_in), shell = True)
+		pop.communicate()
+	elif text.startswith(patt15):
+		arg = text[len(patt15):].strip()
+		print arg
+		pop_in = ['git', 'add', '*']; pop = subprocess.Popen(' '.join(pop_in), shell = True); pop.communicate();
+		pop_in = ['git', 'commit', '-m', '"{}"'.format('trivial' if len(arg)==0 else arg)]; pop = subprocess.Popen(' '.join(pop_in), shell = True); pop.communicate();
+		pop_in = ['git', 'push', 'origin', 'master']; pop = subprocess.Popen(' '.join(pop_in), shell = True); pop.communicate();
 	else:
 		print "Apologies, I could not understand what you said."
 		print "I understand:"
