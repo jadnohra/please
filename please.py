@@ -150,6 +150,8 @@ def process_scrape(arg):
 		temps.append(fp)
 		print '[{}]'.format(fileSize(os.path.getsize(fp)))
 	return temps
+def quote_list(items):
+	return [x if (x.startswith("''") or x.startswith('"')) else '"{}"'.format(x) for x in items]
 def join_files(files):
 	fname_substr = long_substr(files)
 	if len(fname_substr) and (os.path.isdir(fname_substr) == False):
@@ -157,7 +159,7 @@ def join_files(files):
 	else:
 		out_dir = fname_substr if os.path.isdir(fname_substr) else fptemp()
 		out_name = fpjoin([out_dir, randfilename(out_dir, 'join_', 'pdf')])
-	pop_in = [fpjoinhere(['concat_pdf']), '--output', out_name] + files
+	pop_in = [fpjoinhere(['concat_pdf']), '--output', out_name] + quote_list(files)
 	pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	out, err = pop.communicate()
 	return out_name
@@ -196,7 +198,7 @@ def get_list_tabs(right_of_curr = False):
 def list_tabs(right_of_curr = False, use_tex = False):
 	urls = get_list_tabs(right_of_curr)
 	print '\n', '\n'.join(['\\url{{ {} }}'.format(x) if use_tex else x for x in urls]), '\n'
-def join_tabs(right_of_curr = False, interactive = False):
+def join_tabs(right_of_curr = False, interactive = False, TOC_only = False):
 	def url_to_pdf_2(url, pdf):
 		return url_to_pdf(url, pdf, 2)
 	def rem_proto(url):
@@ -244,6 +246,8 @@ def join_tabs(right_of_curr = False, interactive = False):
 	print ''
 	title_content = '<html><body> <center><b>{}</b></center> <ol> {} </ol></body></html>'.format(time.ctime(), ''.join('<li>{}</li>'.format(x) for x in urls))
 	cached_process(True, 'T.O.C', title_content, '.pdf', lambda x,y: content_to_pdf(x, y), temps, None, None)
+	if TOC_only:
+		return
 	urli = 0
 	for url in urls:
 		print ' {}.'.format(urli+1),; urli = urli+1;
@@ -308,6 +312,7 @@ def process(text_):
 	patt10 = new_patt('list all tabs', 'tex')
 	patt11 = new_patt('list tabs', 'tex')
 	patt12 = new_patt('join tabs', 'interactive')
+	patt12_1 = new_patt('toc tabs')
 	patt13 = new_patt('clean temp')
 	patt14 = new_patt('git status')
 	patt15 = new_patt('push git', 'message')
@@ -319,7 +324,8 @@ def process(text_):
 		print out
 	elif text.startswith(patt2):
 		arg = text[len(patt2):]
-		pop_in = ['find', '.', '-maxdepth', '1', '-iname', '"*{}*"'.format(arg)]
+		head,tail = os.path.split(arg); head = '.' if len(head) == 0 else head;
+		pop_in = ['find', head, '-maxdepth', '1', '-iname', '"*{}*"'.format(tail)]
 		pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE)
 		out, err = pop.communicate()
 		print out
@@ -330,7 +336,8 @@ def process(text_):
 		print out
 	elif text.startswith(patt4):
 		arg = text[len(patt4):]
-		pop_in = ['find', '.', '-maxdepth', '1', '-iname', '"*{}*"'.format(arg)]
+		head,tail = os.path.split(arg); head = '.' if len(head) == 0 else head;
+		pop_in = ['find', head, '-maxdepth', '1', '-iname', '"*{}*"'.format(tail)]
 		pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE)
 		out, err = pop.communicate()
 		files = [x for x in sorted(out.split('\n')) if len(x)]
@@ -366,6 +373,8 @@ def process(text_):
 			list_tabs(True, 'tex' in text)
 	elif text.startswith(patt12):
 			join_tabs(True, 'interactive' in text)
+	elif text.startswith(patt12_1):
+			join_tabs(True, False, True)
 	elif text.startswith(patt13):
 		shutil.rmtree(fptemp())
 	elif text.startswith(patt14):
