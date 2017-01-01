@@ -1,5 +1,6 @@
 import sys, subprocess, os, math, os.path, traceback, time, shutil
 import urllib, urllib2, urlparse
+import re
 try:
 	#import urllib2.urlparse
 	import requests
@@ -155,7 +156,7 @@ def quote_list(items):
 def join_files(files):
 	fname_substr = long_substr(files)
 	if len(fname_substr) and (os.path.isdir(fname_substr) == False):
-		out_name = '{}.pdf'.format(fname_substr)
+		out_name = '{}.pdf'.format(fname_substr.strip())
 	else:
 		out_dir = fname_substr if os.path.isdir(fname_substr) else fptemp()
 		out_name = fpjoin([out_dir, randfilename(out_dir, 'join_', 'pdf')])
@@ -178,26 +179,63 @@ def move_tabs_to_new_window():
 	p = subprocess.Popen(['osascript', '-'] + args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 	out,err = p.communicate(scpt)
 	#print (p.returncode, stdout, stderr)
-def get_list_tabs(right_of_curr = False):
-	scpt = """
+def get_list_tabs_field(field, right_of_curr = False):
+	scpt_templ = """
 	set all_urls to ""
 	tell application "Safari"
 		set l to tabs of window 1 {}
 		repeat with t in l
-			set url_str to (URL of t) as string
+			set url_str to (_FIELD_ of t) as string
 			set all_urls to all_urls & url_str & "\n"
 		end repeat
 	end tell
 	return all_urls
 	""".format('where index >= (get index of current tab of window 1)' if right_of_curr else '')
+	scpt = scpt_templ.replace('_FIELD_', field)
 	args = []
 	p = subprocess.Popen(['osascript', '-'] + args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 	out,err = p.communicate(scpt)
 	urls = [x for x in out.split('\n') if len(x)]
 	return urls
-def list_tabs(right_of_curr = False, use_tex = False):
-	urls = get_list_tabs(right_of_curr)
-	print '\n', '\n'.join(['\\url{{ {} }}'.format(x) if use_tex else x for x in urls]), '\n'
+def get_list_tabs(fields = ['URL'], right_of_curr = False):
+	ret = []
+	for f in fields:
+		ret.append(get_list_tabs_field(f, right_of_curr))
+	return ret[0] if len(fields) ==  1 else ret
+def tex_escape(text):
+	"""
+		:param text: a plain text message
+		:return: the message escaped to appear correctly in LaTeX
+	"""
+	conv = {
+		'&': r'\&',
+		'%': r'\%',
+		'$': r'\$',
+		'#': r'\#',
+		'_': r'\_',
+		'{': r'\{',
+		'}': r'\}',
+		'~': r'\textasciitilde{}',
+		'^': r'\^{}',
+		'\\': r'\textbackslash{}',
+		'<': r'\textless',
+		'>': r'\textgreater',
+	}
+	regex = re.compile('|'.join(re.escape(unicode(key)) for key in sorted(conv.keys(), key = lambda item: - len(item))))
+	out = regex.sub(lambda match: conv[match.group()], text)
+	return out
+def ask_yes(question):
+	var = raw_input('{} '.format(question))
+	return var in ['y', 'yes']
+def list_tabs(cmd_text, right_of_curr = False):
+	if 'href' in cmd_text:
+		urls_titles = get_list_tabs(['URL', 'name'], right_of_curr)
+		urls_titles = zip(urls_titles[0], urls_titles[1])
+		print '\n', '\n'.join(['\\href{{ {} }}{{ {} }}'.format(tex_escape(x[0]), tex_escape(x[1])) for x in urls_titles]), '\n'
+	else:
+		use_tex = 'tex' in cmd_text
+		urls = get_list_tabs(['URL'], right_of_curr)
+		print '\n', '\n'.join(['\\url{{ {} }}'.format(tex_escape(x)) if use_tex else x for x in urls]), '\n'
 def join_tabs(right_of_curr = False, interactive = False, TOC_only = False):
 	def url_to_pdf_2(url, pdf):
 		return url_to_pdf(url, pdf, 2)
@@ -240,7 +278,7 @@ def join_tabs(right_of_curr = False, interactive = False, TOC_only = False):
 			if get_lambda(url, temp_fp):
 				temps.append(temp_fp)
 				cache_register(url, cache_fp)
-	urls = get_list_tabs(right_of_curr)
+	urls = get_list_tabs(['URL'], right_of_curr)
 	mktemp()
 	temps = []
 	print ''
@@ -290,10 +328,8 @@ def join_tabs(right_of_curr = False, interactive = False, TOC_only = False):
 	vt_col('default')
 	print ''
 	#print temps
-	if interactive:
-		var = raw_input('Should I join these files? ')
-		if var not in ['y', 'yes']:
-			return
+	if interactive and not ask_yes('Should I join these files?'):
+		return
 	print join_files(temps)
 def process(text_):
 	patts = []
@@ -303,7 +339,7 @@ def process(text_):
 	patt1 = new_patt('find files with ')
 	patt2 = new_patt('find files named ')
 	patt3 = new_patt('find duplicates')
-	patt4 = new_patt('join files named ')
+	patt4 = new_patt('join files named ', 'interactive')
 	patt5 = new_patt('show ')
 	patt6 = new_patt('count files')
 	patt7 = new_patt('scrape and join ')
@@ -336,12 +372,24 @@ def process(text_):
 		print out
 	elif text.startswith(patt4):
 		arg = text[len(patt4):]
+		interactive = False
+		if arg.strip().endswith('interactive'):
+			interactive = True
+			arg = arg[:-1-len('interactive')].strip()
 		head,tail = os.path.split(arg); head = '.' if len(head) == 0 else head;
 		pop_in = ['find', head, '-maxdepth', '1', '-iname', '"*{}*"'.format(tail)]
 		pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE)
 		out, err = pop.communicate()
 		files = [x for x in sorted(out.split('\n')) if len(x)]
-		print join_files(files)
+		if len(files):
+			if interactive:
+				print 'Found:'
+				print '\n'.join([' '+ x for x in files])
+				if not ask_yes('Should I join these files?'):
+					return
+			print join_files(files)
+		else:
+			print 'No files could be matched to [{}]'.format(tail)
 	elif text.startswith(patt5):
 		arg = text[len(patt5):]
 		if arg.endswith('.txt'):
@@ -368,9 +416,9 @@ def process(text_):
 	elif text.startswith(patt9):
 		move_tabs_to_new_window()
 	elif text.startswith(patt10):
-			list_tabs(False, 'tex' in text)
+		list_tabs(text, False)
 	elif text.startswith(patt11):
-			list_tabs(True, 'tex' in text)
+		list_tabs(text, True)
 	elif text.startswith(patt12):
 			join_tabs(True, 'interactive' in text)
 	elif text.startswith(patt12_1):
