@@ -1,6 +1,7 @@
 import sys, subprocess, os, math, os.path, traceback, time, shutil
 import urllib, urllib2, urlparse
 import re
+import json
 try:
 	#import urllib2.urlparse
 	import requests
@@ -14,13 +15,39 @@ gPrintCol = [ 'default', 'black', 'red', 'green', 'yellow', 'blue', 'magenta', '
 gPrintColCode = [ "\x1B[0m", "\x1B[30m", "\x1B[31m", "\x1B[32m", "\x1B[33m", "\x1B[34m", "\x1B[35m", "\x1B[36m", "\x1B[37m",
 "\x1B[49m", "\x1B[40m", "\x1B[41m", "\x1B[42m", "\x1B[43m", "\x1B[44m", "\x1B[45m", "\x1B[46m", "\x1B[47m", ]
 gAltCols = [ gPrintCol.index(x) for x in ['default', 'yellow'] ]
+gLastColI = 0
 def vt_coli(coli):
+	global gLastColI; gLastColI = coli;
 	coli = coli % len(gPrintCol)
 	code = gPrintColCode[coli]
 	sys.stdout.write(code)
 	#sys.stdout.write('\x1B[{}D'.format(len(code)-3))
 def vt_col(col):
 	vt_coli(gPrintCol.index(col))
+
+def print_and_choose(list, indent='', postindex = False, forceChoose = False):
+	if (len(list) == 0): return []
+	if (len(list) == 1 and forceChoose == False): return [0]
+	for i in range(len(list)):
+		vt_coli(gAltCols[i % len(gAltCols)])
+		if postindex:
+			print indent + '. {} ({})'.format(list[i], i+1)
+		else:
+			print indent + '{}. {}'.format(i+1, list[i])
+	vt_col('default')
+	print '>',
+	input_str = raw_input()
+	choices = []
+	if ('-' in input_str):
+		list = input_str.split('-')
+		choices = range(int(list[0]), int(list[1])+1)
+	elif (',' in input_str):
+		choices = [int(x) for x in input_str.split(',')]
+	else:
+		if len(input_str):
+			choices.append(int(input_str))
+	choices = [i-1 for i in choices]
+	return choices
 
 def fpjoin(aa):
 	ret = os.path.join(aa[0], aa[1])
@@ -68,6 +95,11 @@ def is_substr(find, data):
 	return True
 def hash_str_12(s):
 	return abs(hash(s)) % (10 ** 12)
+def format_proc_out(err, indent=''):
+	return [indent + x.strip() for x in err.split('\n') if (len(x.strip()))] if len(err) else []
+def print_formatted_proc_err(elines):
+	if len(elines):
+		vt_col('red'); print elines; vt_col('default');
 def textSearchPdfDjvu(path, phrase):
 	fname_, fext = os.path.splitext(path); fext = fext.lower();
 	if (fext.lower() == '.pdf'):
@@ -79,10 +111,7 @@ def textSearchPdfDjvu(path, phrase):
 	#print ' '.join(args)
 	proc = subprocess.Popen(' '.join(args), stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell=True)
 	(out, err) = proc.communicate()
-	elines = []; lines = [];
-	if (len(err)):
-		elines = [' ' + x.strip() for x in err.split('\n') if (len(x.strip()))]
-	lines = [x.strip() for x in out.split('\n') if (len(x.strip()))]
+	elines = format_proc_out(err, ' '); lines = format_proc_out(out)
 	return (elines, lines)
 def content_to_pdf(content, pdf):
 	pop_in = ['node', fpjoinhere(['npm', 'arg_to_pdf.js']), '"{}"'.format(content), pdf]
@@ -331,6 +360,89 @@ def join_tabs(right_of_curr = False, interactive = False, TOC_only = False):
 	if interactive and not ask_yes('Should I join these files?'):
 		return
 	print join_files(temps)
+def ec2_extract_profiles():
+	cfg = ''
+	cfg_fp = os.path.expanduser('~/.aws/config')
+	if os.path.isfile(cfg_fp):
+		with open(cfg_fp,'r') as f:
+			cfg = f.read()
+	lines = [x.strip() for x in cfg.split('\n')]
+	prof_lines = [x for x in lines if x.startswith('[profile ') and x.endswith(']')]
+	profiles = {}
+	for x in prof_lines:
+		prof = x[len('[profile '):-1]; profiles[prof] = '';
+	profiles['default'] = ''
+	return profiles.keys()
+def ec2_inst_json(profile = 'default', inst_id = None, silent=False):
+	args = ['aws', 'ec2', 'describe-instances', '--profile', profile]
+	do_print = False
+	if inst_id is not None:
+		args.extend(['--instance-ids', inst_id])
+	else:
+		sys.stdout.write('querying aws..'); sys.stdout.flush(); do_print = True;
+	proc = subprocess.Popen(args, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+	(out, err) = proc.communicate()
+	if do_print:
+		print '.'
+	print_formatted_proc_err(format_proc_out(err))
+	return json.loads(out)
+def ec2_info_from_json(data):
+	infos = []
+	for res in data['Reservations']:
+		for inst in res['Instances']:
+			info = {}
+			for x in ['InstanceId', 'KeyName', 'PublicDnsName', 'LaunchTime']:
+				info[x] = inst.get(x)
+			if 'State' in inst:
+				info['State'] = inst['State'].get('Name', '')
+			for tag in inst['Tags']:
+				if any([x in tag['Key'] for x in ['Name']]):
+					info['Tag_' + tag['Key']] = tag['Value']
+			infos.append(info)
+	return infos
+def extract_all_ec2s():
+	profiles = ec2_extract_profiles()
+	profs_datas = [ec2_inst_json(x) for x in profiles]
+	profs_ec2s = [ec2_info_from_json(x) for x in profs_datas]
+	all_ec2s = []
+	for i in range(len(profiles)):
+		profile = profiles[i]; prof_ec2s = profs_ec2s[i];
+		for ec2 in prof_ec2s:
+			ec2['Profile'] = profile
+			all_ec2s.append(ec2)
+	return all_ec2s
+def to_clipboard(clip_str):
+	os.system('echo %s | tr -d "\n" | pbcopy' % clip_str)
+def ec2_start_stop_instances(ec2s, start):
+	for ec2 in ec2s:
+		if (start and ec2['State'] in ['running', 'pending']) or (not start and ec2['State'] in ['stopping']):
+			continue
+		args = ['aws', 'ec2', 'start-instances' if start else 'stop-instances', '--profile', ec2['Profile'], '--instance-ids', ec2['InstanceId']]
+		proc = subprocess.Popen(args, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+		(out, err) = proc.communicate()
+		print_formatted_proc_err(format_proc_out(err))
+		#print out
+	if len(ec2s) > 0:
+		print (' Starting.' if start else ' Stopping.'),
+	ec2_states = ['pending']*len(ec2s)
+	while len([x for x in ec2_states if x == 'pending']) > 0:
+		for ec2_i in range(len(ec2s)):
+			if ec2_states[ec2_i] == 'pending':
+				data = ec2_info_from_json(ec2_inst_json(ec2['Profile'], ec2s[ec2_i]['InstanceId']))[0]
+				if data['State'] in ['running', 'terminated', 'stopped']:
+					ec2_states[ec2_i] = data['State']
+			ec2s[ec2_i]['PublicDnsName'] = data['PublicDnsName']
+		sys.stdout.write('.'); sys.stdout.flush();
+		time.sleep(1)
+	print ''
+	for ec2_i in range(len(ec2s)):
+		dns_str = ec2s[0].get('PublicDnsName', '')
+		print '  ' + '[{}] -> {}'.format(ec2s[ec2_i]['Tag_Name'], dns_str),
+		if ec2_i == 0 and len(dns_str):
+			to_clipboard(dns_str)
+			print ' -> clipboard'
+		else:
+			print ''
 def process(text_):
 	patts = []
 	def new_patt(name, ext = None):
@@ -352,6 +464,11 @@ def process(text_):
 	patt13 = new_patt('clean temp')
 	patt14 = new_patt('git status')
 	patt15 = new_patt('push git', 'message')
+	patt16 = new_patt('list ec2')
+	patt17 = new_patt('start ec2 ')
+	patt18 = new_patt('stop ec2')
+	patt19 = new_patt('ssh ec2')
+	patt20 = new_patt('start and ssh ec2 ')
 	if text.startswith(patt1):
 		arg = text[len(patt1):]
 		pop_in = ['grep', '-ril', '"{}"'.format(arg), '.']
@@ -435,6 +552,70 @@ def process(text_):
 		pop_in = ['git', 'add', '*']; pop = subprocess.Popen(' '.join(pop_in), shell = True); pop.communicate();
 		pop_in = ['git', 'commit', '-m', '"{}"'.format('trivial' if len(arg)==0 else arg)]; pop = subprocess.Popen(' '.join(pop_in), shell = True); pop.communicate();
 		pop_in = ['git', 'push', 'origin', 'master']; pop = subprocess.Popen(' '.join(pop_in), shell = True); pop.communicate();
+	elif any( text.startswith(x) for x in [patt16] ):
+		def format_ec2_pair(x):
+			pair_str = '[{}: {}]'.format(x[0], x[1])
+			if x[0] == 'State':
+				colis = {'running':gPrintCol.index('green'), 'stopped':gPrintCol.index('red'), 'pending':gPrintCol.index('yellow'), 'stopping':gPrintCol.index('magenta'), 'terminated':gPrintCol.index('cyan') }
+				coli = colis.get(x[1], gPrintCol.index('cyan'))
+				pair_str = gPrintColCode[coli] + pair_str + gPrintColCode[0]
+			return pair_str
+		ec2s = extract_all_ec2s()
+		for ec2 in ec2s:
+			print ' ' + ' '.join([format_ec2_pair(x) for x in ec2.items()])
+	elif text.startswith(patt17) or text.startswith(patt20):
+		arg = text[len(patt17):] if text.startswith(patt17) else text[len(patt20):]
+		ec2s = extract_all_ec2s()
+		cands_i = []
+		for i in range(len(ec2s)):
+			if arg.lower() in ec2s[i]['Tag_Name'].lower():
+				cands_i.append(i)
+		if len(cands_i) > 0:
+			if len(cands_i) > 1:
+				start_i = print_and_choose([' {} ({})'.format(ec2s[x]['Tag_Name'], ec2s[x]['InstanceId'])  for x in cands_i], ' ')
+			else:
+				start_i = cands_i
+			ec2_start_stop_instances([ec2s[x] for x in start_i], True)
+			if text.startswith(patt20):
+				process(text.replace('start and ssh', 'ssh'))
+	elif text.startswith(patt18):
+		arg = text[len(patt18)+1:] if len(text) > len(patt18) else ''
+		ec2s = extract_all_ec2s()
+		cands_i = []
+		for i in range(len(ec2s)):
+			if ec2s[i]['State'] in ['running', 'stopping', 'pending'] and arg.lower() in ec2s[i]['Tag_Name'].lower():
+				cands_i.append(i)
+		if len(cands_i) > 0:
+			if arg == '':
+				start_i = cands_i
+			else:
+				if len(cands_i) > 1:
+					start_i = print_and_choose([' {} ({})'.format(ec2s[x]['Tag_Name'], ec2s[x]['InstanceId'])  for x in cands_i], ' ')
+				else:
+					start_i = cands_i
+			ec2_start_stop_instances([ec2s[x] for x in start_i], False)
+	elif text.startswith(patt19):
+		arg = text[len(patt19)+1:] if len(text) > len(patt18) else ''
+		ec2s = extract_all_ec2s()
+		cands_i = []
+		for i in range(len(ec2s)):
+			if ec2s[i]['State'] == 'running' and arg.lower() in ec2s[i]['Tag_Name'].lower():
+				cands_i.append(i)
+		if len(cands_i) > 0:
+			if len(cands_i) > 1:
+				ssh_i = print_and_choose([' {} ({})'.format(ec2s[x]['Tag_Name'], ec2s[x]['InstanceId'])  for x in cands_i], ' ')
+			else:
+				ssh_i = cands_i
+			for i in ssh_i:
+				args = ['ssh', '-i', os.path.expanduser('~/Dropbox/Temp/test_1.400.pem.txt'), 'ubuntu@{}'.format(ec2s[i]['PublicDnsName'])]
+				clip_str = ' '.join(args)
+				print '[{}]'.format(clip_str),
+				if len(ssh_i) == 1:
+					print ' -> clipboard'.format(clip_str)
+					to_clipboard(clip_str)
+					#subprocess.Popen(' '.join(args), shell=True)
+				else:
+					print ''
 	else:
 		print "Apologies, I could not understand what you said."
 		print "I understand:"
