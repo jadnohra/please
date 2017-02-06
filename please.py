@@ -52,7 +52,7 @@ def print_and_choose(list, indent='', postindex = False, forceChoose = False):
 def fpjoin(aa):
 	ret = os.path.join(aa[0], aa[1])
 	for a in aa[2:]:
-	 	ret = os.path.join(ret,a)
+		ret = os.path.join(ret,a)
 	return ret
 def fphere():
 	return os.path.dirname(os.path.realpath(__file__))
@@ -74,9 +74,9 @@ def randfilename(dir, pre, ext):
 		i=i+1
 def fileSize(num, suffix='b'):
 	for unit in ['','K','M','G','T','P','E','Z']:
-	    if abs(num) < 1024.0:
-	        return "%3.1f %s%s" % (num, unit, suffix)
-	    num /= 1024.0
+			if abs(num) < 1024.0:
+					return "%3.1f %s%s" % (num, unit, suffix)
+			num /= 1024.0
 	return "%.1f %s%s" % (num, 'Y', suffix)
 def long_substr(data):
 	substr = ''
@@ -379,7 +379,7 @@ def ec2_inst_json(profile = 'default', inst_id = None, silent=False):
 	if inst_id is not None:
 		args.extend(['--instance-ids', inst_id])
 	else:
-		sys.stdout.write('querying aws..'); sys.stdout.flush(); do_print = True;
+		sys.stdout.write('querying aws ({})..'.format(profile)); sys.stdout.flush(); do_print = True;
 	proc = subprocess.Popen(args, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 	(out, err) = proc.communicate()
 	if do_print:
@@ -443,6 +443,26 @@ def ec2_start_stop_instances(ec2s, start):
 			print ' -> clipboard'
 		else:
 			print ''
+def file_size(file_path):
+		bytes = os.stat(file_path).st_size if os.path.isfile(file_path) else 0
+		for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
+				if bytes < 1024.0:
+					return "%3.1f %s" % (bytes, x)
+				bytes /= 1024.0
+def google_wget_dload(url, file_out):
+		args_1 = ['wget', '--save-cookies cookies.txt', '--keep-session-cookies', '--no-check-certificate', url, '-O-']
+		proc = subprocess.Popen(' '.join(args_1), stdout = subprocess.PIPE, stderr=subprocess.PIPE, shell = True)
+		(out_1, err) = proc.communicate()
+		#print out_1, err
+		args_2 = ['sed', '-rn', "'s/.*confirm=([0-9A-Za-z_]+).*/Code: \\1\\n/p'"]
+		proc = subprocess.Popen(' '.join(args_2), stdin = subprocess.PIPE, stdout = subprocess.PIPE, shell=True)
+		(out_2, err) = proc.communicate(input=out_1)
+		#print out_2
+		conf_code = out_2.split(':')[1].strip()
+		args_3 = ['wget', '--load-cookies cookies.txt', '-O', "'{}'".format(file_out), "'{}&confirm={}'".format(url, conf_code)]
+		#print ' '.join(args_3)
+		subprocess.Popen(' '.join(args_3), shell=True)
+		proc.communicate()
 def process(text_):
 	patts = []
 	def new_patt(name, ext = None):
@@ -469,6 +489,7 @@ def process(text_):
 	patt18 = new_patt('stop ec2')
 	patt19 = new_patt('ssh ec2')
 	patt20 = new_patt('start and ssh ec2 ')
+	patt21 = new_patt('wget from google ', 'as')
 	if text.startswith(patt1):
 		arg = text[len(patt1):]
 		pop_in = ['grep', '-ril', '"{}"'.format(arg), '.']
@@ -616,6 +637,11 @@ def process(text_):
 					#subprocess.Popen(' '.join(args), shell=True)
 				else:
 					print ''
+	elif text.startswith(patt21):
+		args = text[len(patt21)].split(' ')
+		file_id = args[0]; file_out = ' '.join(args[2:]);
+		google_wget_dload(file_id, file_out)
+		print '[{}] : {}'.format(file_out, file_size(file_out))
 	else:
 		print "Apologies, I could not understand what you said."
 		print "I understand:"
