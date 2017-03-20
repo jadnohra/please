@@ -257,10 +257,13 @@ def ask_yes(question):
 	var = raw_input('{} '.format(question))
 	return var in ['y', 'yes']
 def list_tabs(cmd_text, right_of_curr = False):
-	if 'href' in cmd_text:
+	if 'href' in cmd_text or 'md' in cmd_text:
 		urls_titles = get_list_tabs(['URL', 'name'], right_of_curr)
 		urls_titles = zip(urls_titles[0], urls_titles[1])
-		print '\n', '\n'.join(['\\href{{ {} }}{{ {} }}'.format(tex_escape(x[0]), tex_escape(x[1])) for x in urls_titles]), '\n'
+		if 'href' in cmd_text:
+			print '\n', '\n'.join(['\\href{{ {} }}{{ {} }}'.format(tex_escape(x[0]), tex_escape(x[1])) for x in urls_titles]), '\n'
+		else:
+			print '\n', '\n'.join(['[{}]( {} )'.format(tex_escape(x[0]), tex_escape(x[1])) for x in urls_titles]), '\n'
 	else:
 		use_tex = 'tex' in cmd_text
 		urls = get_list_tabs(['URL'], right_of_curr)
@@ -477,18 +480,18 @@ def process(text_):
 	patt7 = new_patt('scrape and join ')
 	patt8 = new_patt('scrape ')
 	patt9 = new_patt('move tabs')
-	patt10 = new_patt('list all tabs', 'tex')
-	patt11 = new_patt('list tabs', 'tex')
+	patt10 = new_patt('list all tabs', 'tex | href | md')
+	patt11 = new_patt('list tabs', 'tex | href | md')
 	patt12 = new_patt('join tabs', 'interactive')
 	patt12_1 = new_patt('toc tabs')
 	patt13 = new_patt('clean temp')
 	patt14 = new_patt('git status')
 	patt15 = new_patt('push git', 'message')
-	patt16 = new_patt('list ec2')
-	patt17 = new_patt('start ec2 ')
-	patt18 = new_patt('stop ec2')
-	patt19 = new_patt('ssh ec2')
-	patt20 = new_patt('start and ssh ec2 ')
+	patt16 = new_patt('aws list')
+	patt17 = new_patt('aws start ')
+	patt18 = new_patt('aws stop')
+	patt19 = new_patt('aws ssh to')
+	patt20 = new_patt('aws start and ssh to ')
 	patt21 = new_patt('wget from google ', 'as')
 	if text.startswith(patt1):
 		arg = text[len(patt1):]
@@ -585,7 +588,7 @@ def process(text_):
 		for ec2 in ec2s:
 			print ' ' + ' '.join([format_ec2_pair(x) for x in ec2.items()])
 	elif text.startswith(patt17) or text.startswith(patt20):
-		arg = text[len(patt17):] if text.startswith(patt17) else text[len(patt20):]
+		arg = text[len(patt20):] if text.startswith(patt20) else text[len(patt17):]
 		ec2s = extract_all_ec2s()
 		cands_i = []
 		for i in range(len(ec2s)):
