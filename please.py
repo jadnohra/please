@@ -466,6 +466,29 @@ def google_wget_dload(url, file_out):
 		#print ' '.join(args_3)
 		subprocess.Popen(' '.join(args_3), shell=True)
 		proc.communicate()
+def ocr(file_path, file_out = None):
+	mktemp()
+	fname = os.path.splitext(os.path.basename(file_path))[0]
+	fpat = '{}/{}_scan_%d.tif'.format(fptemp(), fname)
+	args_1 = ['gs', '-dNOPAUSE', '-dBATCH', '-sDEVICE=tiffg4', '-sOutputFile={}'.format(fpat), file_path]
+	proc = subprocess.Popen(' '.join(args_1), stdout = subprocess.PIPE, stderr=subprocess.PIPE, shell = True)
+	(out_1, err) = proc.communicate()
+	pi = 1
+	while os.path.isfile(fpat.replace('%d', str(pi))):
+		pi = pi+1
+	pc = pi; pi = 1;
+	while os.path.isfile(fpat.replace('%d', str(pi))):
+		args_2 = ['tesseract', fpat.replace('%d', str(pi)), 'stdout']
+		proc = subprocess.Popen(' '.join(args_2), stdout = subprocess.PIPE, stderr=subprocess.PIPE, shell = True)
+		(out_2, err) = proc.communicate()
+		if file_out is None:
+			print out_2
+		else:
+			print '{} page {} of {} ...'.format('\r' if pi > 1 else '', pi, pc),
+			sys.stdout.flush()
+			with open(file_out,'w' if pi==1 else 'a') as fo:
+				fo.write(out_2)
+		pi = pi+1
 def process(text_):
 	patts = []
 	def new_patt(name, ext = None):
@@ -493,6 +516,7 @@ def process(text_):
 	patt19 = new_patt('aws ssh to')
 	patt20 = new_patt('aws start and ssh to ')
 	patt21 = new_patt('wget from google ', 'as')
+	patt22 = new_patt('ocr ', 'to ')
 	if text.startswith(patt1):
 		arg = text[len(patt1):]
 		pop_in = ['grep', '-ril', '"{}"'.format(arg), '.']
@@ -641,10 +665,13 @@ def process(text_):
 				else:
 					print ''
 	elif text.startswith(patt21):
-		args = text[len(patt21)].split(' ')
+		args = text[len(patt21):].split(' ')
 		file_id = args[0]; file_out = ' '.join(args[2:]);
 		google_wget_dload(file_id, file_out)
 		print '[{}] : {}'.format(file_out, file_size(file_out))
+	elif text.startswith(patt22):
+		args = text[len(patt22):].split(' to ')
+		ocr(args[0], args[1] if len(args) > 1 else None)
 	else:
 		print "Apologies, I could not understand what you said."
 		print "I understand:"
