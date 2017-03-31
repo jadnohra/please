@@ -476,7 +476,7 @@ def ocr(file_path, file_out = None):
 	pi = 1
 	while os.path.isfile(fpat.replace('%d', str(pi))):
 		pi = pi+1
-	pc = pi; pi = 1;
+	pc = pi-1; pi = 1;
 	while os.path.isfile(fpat.replace('%d', str(pi))):
 		args_2 = ['tesseract', fpat.replace('%d', str(pi)), 'stdout']
 		proc = subprocess.Popen(' '.join(args_2), stdout = subprocess.PIPE, stderr=subprocess.PIPE, shell = True)
