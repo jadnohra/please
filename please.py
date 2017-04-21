@@ -10,6 +10,12 @@ try:
 	import lxml.cssselect
 except ImportError:
 	lxml = None
+try:
+	import unidecode
+except ImportError:
+	unidecode = None
+
+g_dbg = False
 
 gPrintCol = [ 'default', 'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'bdefault', 'bblack', 'bred', 'bgreen', 'byellow', 'bblue', 'bmagenta', 'bcyan', 'bwhite'  ]
 gPrintColCode = [ "\x1B[0m", "\x1B[30m", "\x1B[31m", "\x1B[32m", "\x1B[33m", "\x1B[34m", "\x1B[35m", "\x1B[36m", "\x1B[37m",
@@ -144,7 +150,7 @@ def url_download(url, fp):
 	except:
 		print ' Error'
 	return False
-def process_scrape(arg):
+def process_scrape(arg, stay_in = None):
 	if lxml == None:
 			print "You need to install 'lxml' and 'requests' first."
 			return
@@ -466,13 +472,40 @@ def google_wget_dload(url, file_out):
 		#print ' '.join(args_3)
 		subprocess.Popen(' '.join(args_3), shell=True)
 		proc.communicate()
-def ocr(file_path, file_out = None):
+def str_to_ascii(strg):
+	if unidecode:
+		strg = unicode(strg, 'utf-8')
+		strg = unidecode.unidecode(strg)
+	return strg
+def pdftotext(file_path, file_out = None, to_ascii = False):
+	args = ['pdftotext', '"{}"'.format(os.path.expanduser(file_path)), '-']
+	proc = subprocess.Popen(' '.join(args), stdout = subprocess.PIPE, stderr=subprocess.PIPE, shell = True)
+	(out, err) = proc.communicate()
+	if g_dbg and len(err):
+		print args
+		vt_col('red'); print err; vt_col('default')
+	if len(out.strip()) == 0:
+		return False
+	if to_ascii:
+		out = str_to_ascii(out)
+	if file_out is None:
+		print out
+	else:
+		with open(os.path.expanduser(file_out),'w') as fo:
+			fo.write(out)
+	return True
+def ocr(file_path, file_out = None, to_ascii = False):
 	mktemp()
 	fname = os.path.splitext(os.path.basename(file_path))[0]
-	fpat = '{}/{}_scan_%d.tif'.format(fptemp(), fname)
-	args_1 = ['gs', '-dNOPAUSE', '-dBATCH', '-sDEVICE=tiffg4', '-sOutputFile={}'.format(fpat), file_path]
+	fpat = '{}/{}_scan_%d.tif'.format(fptemp(), fname.replace(' ', '_'))
+	args_1 = ['gs', '-dNOPAUSE', '-dBATCH', '-sDEVICE=tiffg4', '-sOutputFile="{}"'.format(fpat), '"{}"'.format(os.path.expanduser(file_path))]
 	proc = subprocess.Popen(' '.join(args_1), stdout = subprocess.PIPE, stderr=subprocess.PIPE, shell = True)
 	(out_1, err) = proc.communicate()
+	has_errs = False
+	if g_dbg and len(err):
+		print ' '.join(args_1)
+		vt_col('red'); print err; vt_col('default');
+		has_errs = True
 	pi = 1
 	while os.path.isfile(fpat.replace('%d', str(pi))):
 		pi = pi+1
@@ -481,14 +514,21 @@ def ocr(file_path, file_out = None):
 		args_2 = ['tesseract', fpat.replace('%d', str(pi)), 'stdout']
 		proc = subprocess.Popen(' '.join(args_2), stdout = subprocess.PIPE, stderr=subprocess.PIPE, shell = True)
 		(out_2, err) = proc.communicate()
+		if g_dbg and len(err):
+			print args_2
+			vt_col('red'); print err; vt_col('default');
+			has_errs = True
+		if to_ascii:
+			out_2 = str_to_ascii(out_2)
 		if file_out is None:
 			print out_2
 		else:
 			print '{} page {} of {} ...'.format('\r' if pi > 1 else '', pi, pc),
 			sys.stdout.flush()
-			with open(file_out,'w' if pi==1 else 'a') as fo:
+			with open(os.path.expanduser(file_out),'w' if pi==1 else 'a') as fo:
 				fo.write(out_2)
 		pi = pi+1
+	return has_errs == False
 def process(text_):
 	patts = []
 	def new_patt(name, ext = None):
@@ -501,7 +541,7 @@ def process(text_):
 	patt5 = new_patt('show ')
 	patt6 = new_patt('count files')
 	patt7 = new_patt('scrape and join ')
-	patt8 = new_patt('scrape ')
+	patt8 = new_patt('scrape ', 'staying in ')
 	patt9 = new_patt('move tabs')
 	patt10 = new_patt('list all tabs', 'tex | href | md')
 	patt11 = new_patt('list tabs', 'tex | href | md')
@@ -509,14 +549,15 @@ def process(text_):
 	patt12_1 = new_patt('toc tabs')
 	patt13 = new_patt('clean temp')
 	patt14 = new_patt('git status')
-	patt15 = new_patt('push git', 'message')
+	patt15 = new_patt('push git', 'message ')
 	patt16 = new_patt('aws list')
 	patt17 = new_patt('aws start ')
 	patt18 = new_patt('aws stop')
 	patt19 = new_patt('aws ssh to')
 	patt20 = new_patt('aws start and ssh to ')
-	patt21 = new_patt('wget from google ', 'as')
-	patt22 = new_patt('ocr ', 'to ')
+	patt21 = new_patt('wget from google ', 'as ')
+	patt22 = new_patt('ocr ', 'to | ascii')
+	patt23 = new_patt('text ', 'to | ascii')
 	if text.startswith(patt1):
 		arg = text[len(patt1):]
 		pop_in = ['grep', '-ril', '"{}"'.format(arg), '.']
@@ -576,8 +617,8 @@ def process(text_):
 		print ' Joining ...'
 		print '  {}'.format(join_files(temps))
 	elif text.startswith(patt8):
-		arg = text[len(patt8):]
-		process_scrape(arg)
+		args = text[len(patt8):].split(' ')
+		process_scrape(args[0], args[3:] if len(args)>= 4 else None)
 	elif text.startswith(patt9):
 		move_tabs_to_new_window()
 	elif text.startswith(patt10):
@@ -670,11 +711,26 @@ def process(text_):
 		google_wget_dload(file_id, file_out)
 		print '[{}] : {}'.format(file_out, file_size(file_out))
 	elif text.startswith(patt22):
+		to_ascii = False
+		if text.endswith('ascii'):
+			to_ascii = True; text = text[:-len(' ascii')];
 		args = text[len(patt22):].split(' to ')
-		ocr(args[0], args[1] if len(args) > 1 else None)
+		file_path, out_file = (args[0], args[1] if len(args) > 1 else None)
+		ocr(file_path, out_file, to_ascii)
+	elif text.startswith(patt23):
+		to_ascii = False
+		if text.endswith(' ascii'):
+			to_ascii = True; text = text[:-len(' ascii')];
+		args = text[len(patt23):].split(' to ')
+		file_path, out_file = (args[0], args[1] if len(args) > 1 else None)
+		if pdftotext(file_path, out_file, to_ascii) == False:
+			ocr(file_path, out_file, to_ascii)
 	else:
 		print "Apologies, I could not understand what you said."
 		print "I understand:"
 		print '\n'.join([' ' + x[2] for x in patts])
 
+if '-dbg' in sys.argv:
+	g_dbg = True
+	sys.argv.pop(sys.argv.index('-dbg'))
 process(' '.join(sys.argv[1:]))
