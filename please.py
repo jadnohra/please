@@ -14,6 +14,10 @@ try:
 	import unidecode
 except ImportError:
 	unidecode = None
+try:
+	import graphviz
+except ImportError:
+	graphviz = None
 
 g_dbg = False
 
@@ -263,17 +267,20 @@ def ask_yes(question):
 	var = raw_input('{} '.format(question))
 	return var in ['y', 'yes']
 def list_tabs(cmd_text, right_of_curr = False):
+	output = None
 	if 'href' in cmd_text or 'md' in cmd_text:
 		urls_titles = get_list_tabs(['URL', 'name'], right_of_curr)
 		urls_titles = zip(urls_titles[0], urls_titles[1])
 		if 'href' in cmd_text:
-			print '\n', '\n'.join(['\\href{{ {} }}{{ {} }}'.format(tex_escape(x[0]), tex_escape(x[1])) for x in urls_titles]), '\n'
+			output = '\n'.join(['\\href{{ {} }}{{ {} }}'.format(tex_escape(x[0]), tex_escape(x[1])) for x in urls_titles])
 		else:
-			print '\n', '\n'.join(['[{}]( {} )'.format(tex_escape(x[0]), tex_escape(x[1])) for x in urls_titles]), '\n'
+			output = '\n'.join(['{}. [{}]( {} )'.format(i+1, tex_escape(x[1]), tex_escape(x[0])) for i,x in enumerate(urls_titles)])
 	else:
 		use_tex = 'tex' in cmd_text
 		urls = get_list_tabs(['URL'], right_of_curr)
-		print '\n', '\n'.join(['\\url{{ {} }}'.format(tex_escape(x)) if use_tex else x for x in urls]), '\n'
+		output = '\n'.join(['\\url{{ {} }}'.format(tex_escape(x)) if use_tex else x for x in urls])
+	#to_clipboard(output)
+	print '\n', output, '\n'
 def join_tabs(right_of_curr = False, interactive = False, TOC_only = False):
 	def url_to_pdf_2(url, pdf):
 		return url_to_pdf(url, pdf, 2)
@@ -421,7 +428,7 @@ def extract_all_ec2s():
 			all_ec2s.append(ec2)
 	return all_ec2s
 def to_clipboard(clip_str):
-	os.system('echo %s | tr -d "\n" | pbcopy' % clip_str)
+	os.system('echo "%s" | tr -d "\n" | pbcopy' % clip_str)
 def ec2_start_stop_instances(ec2s, start):
 	for ec2 in ec2s:
 		if (start and ec2['State'] in ['running', 'pending']) or (not start and ec2['State'] in ['stopping']):
