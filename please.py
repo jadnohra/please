@@ -132,8 +132,8 @@ def content_to_pdf(content, pdf):
 		print err
 		return False
 	return True
-def url_to_pdf(url, pdf, delay = None):
-	if False:
+def url_to_pdf(url, pdf, method=None, delay = None):
+	if method == 'webkit':
 		pop_in = ['wkhtmltopdf', '-q', '' if delay is None else '--javascript-delay {}'.format(int(delay*1000)), '"{}"'.format(url), pdf]
 	else:
 		pop_in = ['node', fpjoinhere(['npm', 'url_to_pdf.js']), '"{}"'.format(url), pdf]
@@ -281,9 +281,9 @@ def list_tabs(cmd_text, right_of_curr = False):
 		output = '\n'.join(['\\url{{ {} }}'.format(tex_escape(x)) if use_tex else x for x in urls])
 	#to_clipboard(output)
 	print '\n', output, '\n'
-def join_tabs(right_of_curr = False, interactive = False, TOC_only = False):
+def join_tabs(right_of_curr = False, interactive = False, TOC_only = False, enable_cache = True, method = None):
 	def url_to_pdf_2(url, pdf):
-		return url_to_pdf(url, pdf, 2)
+		return url_to_pdf(url, pdf, method, 0.1)
 	def rem_proto(url):
 		return url[url.index('://')+len('://'):] if '://' in url else url
 	def cached_get_url(url, ext):
@@ -291,7 +291,7 @@ def join_tabs(right_of_curr = False, interactive = False, TOC_only = False):
 		temp_fp = fpjoin([fptemp(), hsh+ext])
 		cache_fp = fpjoin([fptemp(), hsh+ext+'.cache.txt'])
 		is_cached = False
-		if os.path.isfile(temp_fp):
+		if os.path.isfile(temp_fp) and enable_cache and False:
 			curl = ''
 			if os.path.isfile(cache_fp):
 				with open(cache_fp,'r') as f:
@@ -552,7 +552,7 @@ def process(text_):
 	patt9 = new_patt('move tabs')
 	patt10 = new_patt('list all tabs', 'tex | href | md')
 	patt11 = new_patt('list tabs', 'tex | href | md')
-	patt12 = new_patt('join tabs', 'interactive')
+	patt12 = new_patt('join tabs', 'interactive | webkit | cacheless')
 	patt12_1 = new_patt('toc tabs')
 	patt13 = new_patt('clean temp')
 	patt14 = new_patt('git status')
@@ -633,7 +633,7 @@ def process(text_):
 	elif text.startswith(patt11):
 		list_tabs(text, True)
 	elif text.startswith(patt12):
-			join_tabs(True, 'interactive' in text)
+			join_tabs(True, 'interactive' in text, False, 'cacheless' not in text, 'webkit' if 'webkit' in text else None)
 	elif text.startswith(patt12_1):
 			join_tabs(True, False, True)
 	elif text.startswith(patt13):
