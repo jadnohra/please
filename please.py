@@ -593,7 +593,36 @@ def process(text_):
 	patt22 = new_patt('ocr ', 'to | ascii')
 	patt23 = new_patt('text ', 'to | ascii')
 	patt24 = new_patt('convert ', 'to gif')
-	if text.startswith(patt1):
+	patt25 = new_patt('check nvidia gpu')
+	patt26 = new_patt('check distro')
+	patt27 = new_patt('check gcc')
+	patt28 = new_patt('check kernel')
+	patt29 = new_patt('install kernel headers')
+	patt30 = new_patt('install cuda')
+	patt31 = new_patt('check cuda')
+	if text.startswith(patt31):
+		os.system('cat /proc/driver/nvidia/version')
+		os.system('nvcc -V')
+	elif text.startswith(patt30):
+                # https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64&target_distro=Ubuntu&target_version=1804&target_type=debnetwork
+                arg = text[len(patt30):]
+                arg = arg if len(arg.strip()) > 0 else 'cuda-repo-ubuntu1804_10.0.130-1_amd64.deb'
+		os.system('wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/{}'.format(arg))
+                os.system('sudo dpkg -i {}'.format(arg))
+                os.system('sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub')
+                os.system('sudo apt-get update')
+                os.system('sudo apt-get install cuda')
+	elif text.startswith(patt29):
+		os.system('sudo apt-get install linux-headers-$(uname -r)')
+	elif text.startswith(patt28):
+		os.system('uname -r')
+	elif text.startswith(patt27):
+		os.system('gcc --version')
+	elif text.startswith(patt26):
+		os.system('uname -m && cat /etc/*release')
+	elif text.startswith(patt25):
+		os.system('lspci | grep -i nvidia')
+	elif text.startswith(patt1):
 		arg = text[len(patt1):]
 		pop_in = ['grep', '-ril', '"{}"'.format(arg), '.']
 		pop = subprocess.Popen(' '.join(pop_in), shell = True, stdout=subprocess.PIPE)
