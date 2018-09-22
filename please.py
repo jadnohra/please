@@ -411,9 +411,10 @@ def ec2_info_from_json(data):
 				info[x] = inst.get(x)
 			if 'State' in inst:
 				info['State'] = inst['State'].get('Name', '')
-			for tag in inst['Tags']:
-				if any([x in tag['Key'] for x in ['Name']]):
-					info['Tag_' + tag['Key']] = tag['Value']
+			if 'Tags' in inst:
+				for tag in inst['Tags']:
+					if any([x.lower() in tag['Key'].lower() for x in ['Name']]):
+						info['tag_' + tag['Key'].lower()] = tag['Value']
 			infos.append(info)
 	return infos
 def extract_all_ec2s():
@@ -453,7 +454,7 @@ def ec2_start_stop_instances(ec2s, start):
 	print ''
 	for ec2_i in range(len(ec2s)):
 		dns_str = ec2s[0].get('PublicDnsName', '')
-		print '  ' + '[{}] -> {}'.format(ec2s[ec2_i]['Tag_Name'], dns_str),
+		print '  ' + '[{}] -> {}'.format(ec2s[ec2_i]['tag_name'], dns_str),
 		if ec2_i == 0 and len(dns_str):
 			to_clipboard(dns_str)
 			print ' -> clipboard'
@@ -536,6 +537,32 @@ def ocr(file_path, file_out = None, to_ascii = False):
 				fo.write(out_2)
 		pi = pi+1
 	return has_errs == False
+def to_gif(file_path, file_out = None):
+	file_path = os.path.abspath(file_path)
+	mktemp()
+	cwdtemp()
+	fname = os.path.splitext(os.path.basename(file_path))[0]
+	args_1 = ['ffmpeg', '-i', file_path, '-r', '5', fname+'%04d.png']
+	proc = subprocess.Popen(' '.join(args_1), stdout = subprocess.PIPE, stderr=subprocess.PIPE, shell = True)
+	(out_1, err) = proc.communicate()
+	has_errs = False
+	if g_dbg and len(err):
+		print ' '.join(args_1)
+		vt_col('red'); print err; vt_col('default');
+		has_errs = True
+	if file_out is None or len(file_out) == 0:
+		file_out = os.path.splitext(file_path)[0] + '.gif'
+	args_2 = ['gifski', '-o', file_out, fname+'*.png']
+	proc = subprocess.Popen(' '.join(args_2), stdout = subprocess.PIPE, stderr=subprocess.PIPE, shell = True)
+	(out_2, err) = proc.communicate()
+	has_errs = False
+	if g_dbg and len(err):
+		print ' '.join(args_2)
+		vt_col('red'); print err; vt_col('default');
+		has_errs = True
+	if has_errs == False:
+		print '[{}]'.format(fileSize(os.path.getsize(file_out)))
+	return has_errs == False
 def process(text_):
 	patts = []
 	def new_patt(name, ext = None):
@@ -565,6 +592,7 @@ def process(text_):
 	patt21 = new_patt('wget from google ', 'as ')
 	patt22 = new_patt('ocr ', 'to | ascii')
 	patt23 = new_patt('text ', 'to | ascii')
+	patt24 = new_patt('convert ', 'to gif')
 	if text.startswith(patt1):
 		arg = text[len(patt1):]
 		pop_in = ['grep', '-ril', '"{}"'.format(arg), '.']
@@ -664,11 +692,11 @@ def process(text_):
 		ec2s = extract_all_ec2s()
 		cands_i = []
 		for i in range(len(ec2s)):
-			if arg.lower() in ec2s[i]['Tag_Name'].lower():
+			if arg.lower() in ec2s[i]['tag_name'].lower():
 				cands_i.append(i)
 		if len(cands_i) > 0:
 			if len(cands_i) > 1:
-				start_i = print_and_choose([' {} ({})'.format(ec2s[x]['Tag_Name'], ec2s[x]['InstanceId'])  for x in cands_i], ' ')
+				start_i = print_and_choose([' {} ({})'.format(ec2s[x]['tag_name'], ec2s[x]['InstanceId'])  for x in cands_i], ' ')
 			else:
 				start_i = cands_i
 			ec2_start_stop_instances([ec2s[x] for x in start_i], True)
@@ -679,14 +707,14 @@ def process(text_):
 		ec2s = extract_all_ec2s()
 		cands_i = []
 		for i in range(len(ec2s)):
-			if ec2s[i]['State'] in ['running', 'stopping', 'pending'] and arg.lower() in ec2s[i]['Tag_Name'].lower():
+			if ec2s[i]['State'] in ['running', 'stopping', 'pending'] and arg.lower() in ec2s[i]['tag_name'].lower():
 				cands_i.append(i)
 		if len(cands_i) > 0:
 			if arg == '':
 				start_i = cands_i
 			else:
 				if len(cands_i) > 1:
-					start_i = print_and_choose([' {} ({})'.format(ec2s[x]['Tag_Name'], ec2s[x]['InstanceId'])  for x in cands_i], ' ')
+					start_i = print_and_choose([' {} ({})'.format(ec2s[x]['tag_name'], ec2s[x]['InstanceId'])  for x in cands_i], ' ')
 				else:
 					start_i = cands_i
 			ec2_start_stop_instances([ec2s[x] for x in start_i], False)
@@ -695,11 +723,11 @@ def process(text_):
 		ec2s = extract_all_ec2s()
 		cands_i = []
 		for i in range(len(ec2s)):
-			if ec2s[i]['State'] == 'running' and arg.lower() in ec2s[i]['Tag_Name'].lower():
+			if ec2s[i]['State'] == 'running' and arg.lower() in ec2s[i]['tag_name'].lower():
 				cands_i.append(i)
 		if len(cands_i) > 0:
 			if len(cands_i) > 1:
-				ssh_i = print_and_choose([' {} ({})'.format(ec2s[x]['Tag_Name'], ec2s[x]['InstanceId'])  for x in cands_i], ' ')
+				ssh_i = print_and_choose([' {} ({})'.format(ec2s[x]['tag_name'], ec2s[x]['InstanceId'])  for x in cands_i], ' ')
 			else:
 				ssh_i = cands_i
 			for i in ssh_i:
@@ -732,6 +760,10 @@ def process(text_):
 		file_path, out_file = (args[0], args[1] if len(args) > 1 else None)
 		if pdftotext(file_path, out_file, to_ascii) == False:
 			ocr(file_path, out_file, to_ascii)
+	elif text.startswith(patt24):
+		args = text[len(patt24):].split(' to gif')
+		file_path, out_file = (args[0], args[1] if len(args) > 1 else None)
+		to_gif(file_path, out_file)
 	else:
 		print "Apologies, I could not understand what you said."
 		print "I understand:"
